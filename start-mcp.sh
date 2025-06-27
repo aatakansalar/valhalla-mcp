@@ -1,6 +1,6 @@
 #!/bin/bash
 
-echo "Starting Valhalla MCP P..."
+echo "Starting Valhalla MCP..."
 
 # Check if Docker is running
 if ! docker info > /dev/null 2>&1; then
