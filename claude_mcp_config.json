@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "valhalla-mcp": {
+      "command": "node",
+      "args": ["/Users/aatakansalar/Documents/valhalla-mcp/dist/index.js"],
+      "env": {
+        "VALHALLA_BASE_URL": "http://localhost:8002"
+      }
+    }
+  }
+} 

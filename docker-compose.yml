@@ -1,0 +1,26 @@
+services:
+  valhalla:
+    image: ghcr.io/gis-ops/docker-valhalla/valhalla:latest
+    container_name: valhalla
+    ports:
+      - "8002:8002"
+    volumes:
+      - valhalla_tiles:/data/valhalla
+    environment:
+      - tile_urls=https://download.geofabrik.de/europe/monaco-latest.osm.pbf
+      - use_tiles_ignore_pbf=False
+      - serve_tiles=True
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8002/status"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
+
+volumes:
+  valhalla_tiles:
+    driver: local
+
+networks:
+  default:
+    name: valhalla-network 
