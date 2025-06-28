@@ -51,9 +51,25 @@ A Model Context Protocol (MCP) server that provides seamless integration between
 - Claude Desktop
 - NPM or Yarn package manager
 
-### Option 1: Demo API (Fastest Setup)
+### Option 1: Local Valhalla Server
 
-For testing and development, use the public Valhalla demo API:
+For production use or custom datasets:
+
+```bash
+# Prerequisites: Docker and Docker Compose
+./start-mcp.sh
+```
+
+This script will:
+- Build the MCP server
+- Start local Valhalla with Monaco OSM data
+- Wait for services to be ready
+- Run integration tests
+- Provide Claude Desktop configuration
+
+### Option 2: Use Your Pre-existing Valhalla Server
+
+If you already have a Valhalla server running elsewhere:
 
 ```bash
 # Clone and setup
@@ -64,24 +80,8 @@ npm run build
 
 # Configure environment variables
 cp env.example .env
-# Edit .env file and set VALHALLA_BASE_URL=https://valhalla1.openstreetmap.de
+# Edit .env file and set VALHALLA_BASE_URL=http://your-valhalla-server:8002
 ```
-
-### Option 2: Local Valhalla Server (Production)
-
-For production use or custom datasets:
-
-```bash
-# Prerequisites: Docker and Docker Compose
-./start-mvp.sh
-```
-
-This script will:
-- Build the MCP server
-- Start local Valhalla with Monaco OSM data
-- Wait for services to be ready
-- Run integration tests
-- Provide Claude Desktop configuration
 
 ### Claude Desktop Integration
 
@@ -356,7 +356,7 @@ Performance depends on Valhalla configuration and available OSM data.
 
 MIT License - see [LICENSE](LICENSE) file for details.
 
-## Support
+## Acknowledgments
 
 For issues and questions:
 - Open an issue on GitHub

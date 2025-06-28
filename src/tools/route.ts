@@ -2,6 +2,10 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { ValhallaClient, RouteRequest } from "../clients/valhalla.js";
 import { logger } from "../utils/logger.js";
+import { routeCache } from "../utils/cache.js";
+import { validateAndSanitize } from "../utils/validation.js";
+import { handleError, generateRequestId } from "../utils/errors.js";
+import { metrics, measureTime } from "../utils/metrics.js";
 
 // Input schema for route tool - using Zod for validation
 const RouteInputRawShape = {
@@ -30,14 +34,42 @@ export function setupRouteTool(server: McpServer, valhallaClient: ValhallaClient
       description: "Calculate a route between two points using Valhalla routing engine. Returns GeoJSON LineString with summary statistics.",
       inputSchema: RouteInputRawShape
     },
-    async (args: any, extra: any) => {
+    async (args: any, _extra: any): Promise<any> => {
+      const requestId = generateRequestId();
+      const startTime = Date.now();
+
       try {
-        logger.info("Route tool called with args:", JSON.stringify(args));
+        // Enhanced validation with better error messages
+        const input = validateAndSanitize(RouteInputSchema, args);
         
-        // args should now contain the validated parameters from input schema
-        const input = args;
+        logger.info("Route tool called", { 
+          requestId,
+          origin: input.origin,
+          destination: input.destination,
+          mode: input.mode
+        });
         
-        logger.info(`Calculating route from [${input.origin.lat}, ${input.origin.lon}] to [${input.destination.lat}, ${input.destination.lon}] using ${input.mode}`);
+        // Generate cache key
+        const cacheKey = `route:${input.origin.lat},${input.origin.lon}:${input.destination.lat},${input.destination.lon}:${input.mode}:${input.units || 'kilometers'}:${input.alternatives || 0}`;
+        
+        // Check cache first
+        const cachedResult = routeCache.get(cacheKey);
+        if (cachedResult) {
+          metrics.recordCacheHit();
+          metrics.recordRequest({
+            endpoint: '/route',
+            method: 'POST',
+            duration: Date.now() - startTime,
+            success: true,
+            timestamp: Date.now(),
+            requestId
+          });
+          
+          logger.info("Route served from cache", { requestId, cacheKey });
+          return cachedResult;
+        }
+        
+        metrics.recordCacheMiss();
         
         // Prepare Valhalla request
         const valhallaRequest: RouteRequest = {
@@ -45,7 +77,7 @@ export function setupRouteTool(server: McpServer, valhallaClient: ValhallaClient
             { lat: input.origin.lat, lon: input.origin.lon, type: 'break' },
             { lat: input.destination.lat, lon: input.destination.lon, type: 'break' }
           ],
-          costing: input.mode,
+          costing: input.mode || 'auto',
           directions_options: {
             units: input.units || 'kilometers',
             narrative: true
@@ -56,8 +88,10 @@ export function setupRouteTool(server: McpServer, valhallaClient: ValhallaClient
           valhallaRequest.alternates = input.alternatives;
         }
 
-        // Make request to Valhalla
-        const response = await valhallaClient.route(valhallaRequest);
+        // Make request to Valhalla with performance measurement
+        const { result: response, duration: apiDuration } = await measureTime(
+          () => valhallaClient.route(valhallaRequest)
+        );
         
         // Check if response has valid trip data
         if (!response.trip || !response.trip.legs || response.trip.legs.length === 0 || !response.trip.legs[0].shape) {
@@ -89,7 +123,10 @@ export function setupRouteTool(server: McpServer, valhallaClient: ValhallaClient
                   response.trip.summary.min_lat,
                   response.trip.summary.max_lon,
                   response.trip.summary.max_lat
-                ]
+                ],
+                requestId,
+                cached: false,
+                valhalla_duration_ms: apiDuration
               }
             }
           ]
@@ -119,7 +156,7 @@ export function setupRouteTool(server: McpServer, valhallaClient: ValhallaClient
           }
         }
 
-        return {
+        const result = {
           content: [
             {
               type: "text",
@@ -131,18 +168,54 @@ export function setupRouteTool(server: McpServer, valhallaClient: ValhallaClient
           ]
         };
 
-      } catch (error) {
-        logger.error("Route calculation failed:", error);
+        // Cache the result (TTL is handled by cache instance)
+        routeCache.set(cacheKey, result);
+
+        // Record successful metrics
+        metrics.recordRequest({
+          endpoint: '/route',
+          method: 'POST',
+          duration: Date.now() - startTime,
+          success: true,
+          timestamp: Date.now(),
+          requestId
+        });
+
+        logger.info("Route calculation completed", {
+          requestId,
+          distance: response.trip.summary.length,
+          duration: response.trip.summary.time,
+          apiDuration,
+          cached: false
+        });
+
+        return result;
+
+      } catch (error: any) {
+        // Record failed request metrics
+        metrics.recordRequest({
+          endpoint: '/route',
+          method: 'POST',
+          duration: Date.now() - startTime,
+          success: false,
+          timestamp: Date.now(),
+          requestId,
+          errorCode: error?.code || 500
+        });
+
+        logger.error("Route calculation failed", { 
+          requestId,
+          error: error?.message || 'Unknown error',
+          stack: error?.stack 
+        });
+        
+        const errorResponse = handleError(error, requestId);
         
         return {
           content: [
             {
               type: "text",
-              text: JSON.stringify({
-                error: "Failed to calculate route",
-                message: error instanceof Error ? error.message : "Unknown error",
-                type: "route_error"
-              }, null, 2)
+              text: JSON.stringify(errorResponse, null, 2)
             }
           ],
           isError: true

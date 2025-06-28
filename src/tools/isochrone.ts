@@ -2,6 +2,10 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { ValhallaClient, IsochroneRequest } from "../clients/valhalla.js";
 import { logger } from "../utils/logger.js";
+import { isochroneCache } from "../utils/cache.js";
+import { validateAndSanitize } from "../utils/validation.js";
+import { handleError, generateRequestId } from "../utils/errors.js";
+import { metrics, measureTime } from "../utils/metrics.js";
 
 // Input schema for isochrone tool - using Zod for validation
 const IsochroneInputRawShape = {
@@ -25,52 +29,129 @@ export function setupIsochroneTool(server: McpServer, valhallaClient: ValhallaCl
       description: "Generate an isochrone polygon showing areas reachable within a specified travel time from a given point.",
       inputSchema: IsochroneInputRawShape
     },
-    async (args: any, extra: any) => {
+    async (args: any, _extra: any): Promise<any> => {
+      const requestId = generateRequestId();
+      const startTime = Date.now();
+
       try {
-        logger.info("Isochrone tool called with args:", JSON.stringify(args));
+        // Enhanced validation
+        const input = validateAndSanitize(IsochroneInputSchema, args);
         
-        // args should now contain the validated parameters from input schema
-        const input = args;
+        logger.info("Isochrone tool called", { 
+          requestId,
+          origin: input.origin,
+          minutes: input.minutes,
+          mode: input.mode
+        });
         
-        logger.info(`Generating ${input.minutes}-minute isochrone from [${input.origin.lat}, ${input.origin.lon}] using ${input.mode}`);
+        // Generate cache key
+        const cacheKey = `isochrone:${input.origin.lat},${input.origin.lon}:${input.minutes}:${input.mode}`;
+        
+        // Check cache first
+        const cachedResult = isochroneCache.get(cacheKey);
+        if (cachedResult) {
+          metrics.recordCacheHit();
+          metrics.recordRequest({
+            endpoint: '/isochrone',
+            method: 'POST',
+            duration: Date.now() - startTime,
+            success: true,
+            timestamp: Date.now(),
+            requestId
+          });
+          
+          logger.info("Isochrone served from cache", { requestId, cacheKey });
+          return cachedResult;
+        }
+        
+        metrics.recordCacheMiss();
         
         // Prepare Valhalla request
         const valhallaRequest: IsochroneRequest = {
           locations: [
             { lat: input.origin.lat, lon: input.origin.lon }
           ],
-          costing: input.mode,
+          costing: input.mode || 'auto',
           contours: [
             { time: input.minutes, color: "ff0000" }
           ],
           polygons: true
         };
 
-        // Make request to Valhalla
-        const response = await valhallaClient.isochrone(valhallaRequest);
+        // Make request to Valhalla with performance measurement
+        const { result: response, duration: apiDuration } = await measureTime(
+          () => valhallaClient.isochrone(valhallaRequest)
+        );
         
-        // The response should be a GeoJSON FeatureCollection with Polygon features
-        return {
+        // Add metadata to response
+        const enhancedResponse = {
+          ...response,
+          metadata: {
+            requestId,
+            cached: false,
+            valhalla_duration_ms: apiDuration,
+            minutes: input.minutes,
+            mode: input.mode,
+            origin: input.origin
+          }
+        };
+
+        const result = {
           content: [
             {
               type: "text",
-              text: JSON.stringify(response, null, 2)
+              text: JSON.stringify(enhancedResponse, null, 2)
             }
           ]
         };
 
-      } catch (error) {
-        logger.error("Isochrone generation failed:", error);
+        // Cache the result
+        isochroneCache.set(cacheKey, result);
+
+        // Record successful metrics
+        metrics.recordRequest({
+          endpoint: '/isochrone',
+          method: 'POST',
+          duration: Date.now() - startTime,
+          success: true,
+          timestamp: Date.now(),
+          requestId
+        });
+
+        logger.info("Isochrone generation completed", {
+          requestId,
+          minutes: input.minutes,
+          apiDuration,
+          cached: false
+        });
+
+        return result;
+
+      } catch (error: any) {
+        // Record failed request metrics
+        metrics.recordRequest({
+          endpoint: '/isochrone',
+          method: 'POST',
+          duration: Date.now() - startTime,
+          success: false,
+          timestamp: Date.now(),
+          requestId,
+          errorCode: error?.code || 500
+        });
+
+        logger.error("Isochrone generation failed", { 
+          requestId,
+          error: error?.message || 'Unknown error',
+          stack: error?.stack 
+        });
+        
+        const errorResponse = handleError(error, requestId);
         
         return {
           content: [
             {
               type: "text",
-              text: JSON.stringify({
-                error: "Failed to generate isochrone",
-                message: error instanceof Error ? error.message : "Unknown error",
-                type: "isochrone_error"
-              }, null, 2)
+              text: JSON.stringify(errorResponse, null, 2)
             }
           ],
           isError: true

@@ -26,19 +26,24 @@ describe('Logger', () => {
     consoleSpy.mockRestore();
   });
 
-  test('should only log debug when DEBUG env is set', () => {
+  test('should only log debug when LOG_LEVEL is debug', () => {
     const consoleSpy = jest.spyOn(console, 'error').mockImplementation();
     
-    // Without DEBUG env
-    delete process.env.DEBUG;
+    // Debug should not log with default LOG_LEVEL (info)
     logger.debug('Debug message');
     expect(consoleSpy).not.toHaveBeenCalled();
     
-    // With DEBUG env
-    process.env.DEBUG = 'true';
+    // Debug should log with LOG_LEVEL=debug
+    const originalLogLevel = process.env.LOG_LEVEL;
+    process.env.LOG_LEVEL = 'debug';
+    
+    // Since logger is a singleton, we need to test with a different approach
+    // The logger checks LOG_LEVEL at runtime, so this should work
     logger.debug('Debug message');
     expect(consoleSpy).toHaveBeenCalledWith('[DEBUG] Debug message');
     
+    // Restore original LOG_LEVEL
+    process.env.LOG_LEVEL = originalLogLevel;
     consoleSpy.mockRestore();
   });
 }); 

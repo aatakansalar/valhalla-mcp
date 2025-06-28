@@ -24,7 +24,6 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.7.0",
     "axios": "^1.6.2",
-    "dotenv": "^17.0.0",
     "geojson": "^0.5.0",
     "zod": "^3.22.4"
   },

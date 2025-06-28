@@ -6,21 +6,35 @@ export interface Logger {
 }
 
 class ConsoleLogger implements Logger {
+  private shouldLog(level: string): boolean {
+    const levels = ['error', 'warn', 'info', 'debug'];
+    const currentLogLevel = process.env.LOG_LEVEL || 'info';
+    const currentLevelIndex = levels.indexOf(currentLogLevel);
+    const messageLogLevelIndex = levels.indexOf(level);
+    return messageLogLevelIndex <= currentLevelIndex;
+  }
+
   info(message: string, ...args: any[]): void {
-    // MCP servers use stdio for JSON-RPC, so log to stderr
-    console.error(`[INFO] ${message}`, ...args);
+    if (this.shouldLog('info')) {
+      // MCP servers use stdio for JSON-RPC, so log to stderr
+      console.error(`[INFO] ${message}`, ...args);
+    }
   }
 
   error(message: string, ...args: any[]): void {
-    console.error(`[ERROR] ${message}`, ...args);
+    if (this.shouldLog('error')) {
+      console.error(`[ERROR] ${message}`, ...args);
+    }
   }
 
   warn(message: string, ...args: any[]): void {
-    console.error(`[WARN] ${message}`, ...args);
+    if (this.shouldLog('warn')) {
+      console.error(`[WARN] ${message}`, ...args);
+    }
   }
 
   debug(message: string, ...args: any[]): void {
-    if (process.env.DEBUG) {
+    if (this.shouldLog('debug')) {
       console.error(`[DEBUG] ${message}`, ...args);
     }
   }

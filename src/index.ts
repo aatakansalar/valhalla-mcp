@@ -1,4 +1,5 @@
-import { config } from "dotenv";
+import { readFileSync } from "fs";
+import { join } from "path";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
@@ -7,8 +8,27 @@ import { setupTools } from "./tools/index.js";
 import { setupResources } from "./resources/index.js";
 import { logger } from "./utils/logger.js";
 
-// Load environment variables
-config();
+function loadEnvSilently() {
+  try {
+    const envPath = join(process.cwd(), '.env');
+    const envContent = readFileSync(envPath, 'utf8');
+    
+    for (const line of envContent.split('\n')) {
+      const trimmed = line.trim();
+      if (trimmed && !trimmed.startsWith('#')) {
+        const [key, ...valueParts] = trimmed.split('=');
+        if (key && valueParts.length > 0) {
+          const value = valueParts.join('=').replace(/^["']|["']$/g, ''); // Remove quotes
+          if (!process.env[key]) { // Don't override existing env vars
+            process.env[key] = value;
+          }
+        }
+      }
+    }
+  } catch (error) {  }
+}
+
+loadEnvSilently();
 
 // Environment variables
 const VALHALLA_BASE_URL = process.env.VALHALLA_BASE_URL || "http://localhost:8002";
