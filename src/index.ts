@@ -1,3 +1,4 @@
+import { config } from "dotenv";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
@@ -5,6 +6,9 @@ import { ValhallaClient } from "./clients/valhalla.js";
 import { setupTools } from "./tools/index.js";
 import { setupResources } from "./resources/index.js";
 import { logger } from "./utils/logger.js";
+
+// Load environment variables
+config();
 
 // Environment variables
 const VALHALLA_BASE_URL = process.env.VALHALLA_BASE_URL || "http://localhost:8002";

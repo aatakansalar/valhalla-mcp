@@ -49,6 +49,7 @@ A Model Context Protocol (MCP) server that provides seamless integration between
 
 - Node.js 18+ 
 - Claude Desktop
+- NPM or Yarn package manager
 
 ### Option 1: Demo API (Fastest Setup)
 
@@ -61,8 +62,9 @@ cd valhalla-mcp
 npm install
 npm run build
 
-# Configure for demo API
-export VALHALLA_BASE_URL="https://valhalla.openstreetmap.de"
+# Configure environment variables
+cp env.example .env
+# Edit .env file and set VALHALLA_BASE_URL=https://valhalla1.openstreetmap.de
 ```
 
 ### Option 2: Local Valhalla Server (Production)
@@ -95,7 +97,7 @@ This script will:
       "args": ["dist/index.js"],
       "cwd": "/YOUR/PATH/TO/valhalla-mcp",
       "env": {
-        "VALHALLA_BASE_URL": "https://valhalla.openstreetmap.de"
+        "VALHALLA_BASE_URL": "https://valhalla1.openstreetmap.de"
       }
     }
   }
@@ -148,13 +150,26 @@ npm run dev
 
 ### Environment Variables
 
+The server uses environment variables for configuration. Create a `.env` file from the template:
+
+```bash
+cp env.example .env
+```
+
+Available environment variables:
+
 - `VALHALLA_BASE_URL` - Base URL for Valhalla service (default: http://localhost:8002)
 - `DEBUG` - Enable debug logging (default: false)
+- `LOG_LEVEL` - Log level: error, warn, info, debug (default: info)
+- `MCP_SERVER_NAME` - MCP server name (default: valhalla-mcp-server)
+- `MCP_SERVER_VERSION` - MCP server version (default: 0.1.0)
 
 **Common Valhalla endpoints:**
 - `http://localhost:8002` - Local Docker instance (recommended)
-- `https://valhalla.openstreetmap.de` - Public demo API (check API compatibility)
+- `https://valhalla1.openstreetmap.de` - Public demo API (✅ tested and working)
 - `https://your-server.com:8002` - Custom deployment
+
+> **Note:** The main demo URL `https://valhalla.openstreetmap.de` serves a web interface. Use `https://valhalla1.openstreetmap.de` for API access.
 
 ### Docker Deployment
 
@@ -249,12 +264,14 @@ Add to your Claude Desktop configuration:
       "command": "node",
       "args": ["/path/to/valhalla-mcp/dist/index.js"],
       "env": {
-        "VALHALLA_BASE_URL": "http://localhost:8002"
+        "VALHALLA_BASE_URL": "https://valhalla1.openstreetmap.de"
       }
     }
   }
 }
 ```
+
+> **Note:** Environment variables in Claude Desktop config override `.env` file values.
 
 ### Other MCP Clients
 
@@ -276,6 +293,22 @@ The server implements the standard MCP protocol and works with any compliant cli
 
 ## Development
 
+### Installation
+
+```bash
+# Install dependencies
+npm install
+
+# Build the project
+npm run build
+```
+
+Key dependencies:
+- `@modelcontextprotocol/sdk` - Official MCP SDK
+- `axios` - HTTP client for Valhalla API calls
+- `zod` - Runtime type validation
+- `geojson` - GeoJSON type definitions
+- `dotenv` - Environment variable management
 
 ### Testing
 
